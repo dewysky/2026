@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>고카페인 음료 심박동 시뮬레이터</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        /* 심전도 모니터용 캔버스 스타일 */
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* 커스텀 스크롤바 */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8; 
+        }
+
+        /* 선택된 카드 스타일링을 위한 유틸리티 클래스 */
+        .card-selected {
+            border-color: #3b82f6 !important;
+            background-color: #eff6ff !important;
+            box-shadow: 0 4px 6px -1px rgba(59, 130, 246, 0.2), 0 2px 4px -1px rgba(59, 130, 246, 0.1) !important;
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 p-4 md:p-8 flex flex-col items-center">
+
+    <header class="w-full max-w-6xl mb-8 text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+            <h1 class="text-3xl md:text-4xl font-extrabold text-slate-900 tracking-tight">카페인 반응 <span class="text-rose-500">심박동 시뮬레이터</span></h1>
+            <p class="text-slate-500 mt-2 text-sm md:text-base">내가 마신 음료가 내 심장에 어떤 영향을 미칠까? 음료와 나의 체질을 선택해보세요.</p>
+        </div>
+        <div class="bg-white px-4 py-2 rounded-full shadow-sm border border-slate-200 flex items-center gap-2">
+            <div class="w-3 h-3 rounded-full bg-green-500 animate-pulse"></div>
+            <span class="text-sm font-semibold text-slate-600">실시간 생체 신호 모니터링 중</span>
+        </div>
+    </header>
+
+    <main class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- 왼쪽 패널: 조작부 -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- 음료 선택 -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="text-2xl">🥤</span> 1. 음료 선택
+                </h2>
+                <div class="grid grid-cols-2 gap-3" id="drink-container">
+                    <!-- JS로 동적 생성 -->
+                </div>
+            </section>
+
+            <!-- 민감도 선택 -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+                <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
+                    <span class="text-2xl">🧬</span> 2. 카페인 민감도 (체질)
+                </h2>
+                <div class="flex flex-col gap-3" id="sensitivity-container">
+                    <!-- JS로 동적 생성 -->
+                </div>
+            </section>
+
+            <div class="bg-blue-50 rounded-xl p-4 text-sm text-blue-800 border border-blue-100 leading-relaxed">
+                <strong class="block mb-1">💡 탐구 팁:</strong>
+                동일한 음료를 마셔도 유전적인 카페인 분해 효소 활성도에 따라 심박수 증가 폭이 다르게 나타납니다. '스누피 커피우유'와 '영향이 큰 사람'을 조합해 보세요!
+            </div>
+        </div>
+
+        <!-- 오른쪽 패널: 시각화부 -->
+        <div class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- 상태 표시 및 심장 캔버스 -->
+            <section class="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 min-h-[300px]">
+                <!-- 배경 장식 -->
+                <div class="absolute -right-20 -top-20 w-64 h-64 bg-rose-50 rounded-full blur-3xl opacity-50 pointer-events-none"></div>
+
+                <!-- 상태 텍스트 -->
+                <div class="flex flex-col z-10 w-full md:w-1/2">
+                    <h3 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-1">Current Heart Rate</h3>
+                    <div class="flex items-baseline gap-2 mb-2">
+                        <span id="bpm-display" class="text-6xl font-black text-slate-800 transition-colors duration-300">72</span>
+                        <span class="text-xl font-medium text-slate-500">BPM</span>
+                    </div>
+                    
+                    <div id="status-badge" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold bg-green-100 text-green-700 w-fit transition-all duration-300">
+                        <span class="w-2 h-2 rounded-full bg-green-500"></span>
+                        <span id="status-text">정상 (안정 상태)</span>
+                    </div>
+
+                    <div class="mt-6 pt-6 border-t border-slate-100">
+                        <div class="text-sm text-slate-600 flex justify-between mb-1">
+                            <span>계산된 추가 심박수</span>
+                            <span id="added-bpm" class="font-bold text-slate-800">+0 BPM</span>
+                        </div>
+                        <div class="text-xs text-slate-400">기본 심박수(72) + (카페인 함량 × 체질 가중치)</div>
+                    </div>
+                </div>
+
+                <!-- 심장 애니메이션 캔버스 -->
+                <div class="w-full md:w-1/2 h-48 md:h-full flex justify-center items-center relative z-10">
+                    <canvas id="heartCanvas" class="w-48 h-48"></canvas>
+                </div>
+            </section>
+
+            <!-- 심전도(ECG) 캔버스 -->
+            <section class="bg-slate-900 rounded-2xl shadow-lg p-4 relative overflow-hidden h-[240px] flex flex-col">
+                <div class="flex justify-between items-center mb-2 px-2 relative z-10">
+                    <h3 class="text-slate-300 font-semibold text-sm flex items-center gap-2">
+                        <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        Electrocardiogram (ECG)
+                    </h3>
+                    <div class="text-xs text-slate-500 font-mono">SWEEP: 25mm/s</div>
+                </div>
+                
+                <!-- 캔버스 래퍼 -->
+                <div class="flex-grow relative border border-slate-700/50 rounded bg-slate-800/50">
+                    <!-- 배경 모눈종이 패턴(CSS) -->
+                    <div class="absolute inset-0 opacity-20 pointer-events-none" 
+                         style="background-image: linear-gradient(rgba(255,255,255,.2) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.2) 1px, transparent 1px), linear-gradient(rgba(255,255,255,.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.1) 1px, transparent 1px); 
+                                background-size: 50px 50px, 50px 50px, 10px 10px, 10px 10px; 
+                                background-position: -1px -1px, -1px -1px, -1px -1px, -1px -1px;">
+                    </div>
+                    <canvas id="ecgCanvas" class="absolute inset-0 z-10"></canvas>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <script>
+        // --- 데이터 정의 ---
+        const drinks = [
+            { id: 'water', name: '생수 (기본)', caffeine: 0, icon: '💧', color: 'border-blue-200 hover:border-blue-400' },
+            { id: 'hot6', name: '핫식스', caffeine: 60, icon: '⚡', color: 'border-yellow-200 hover:border-yellow-400' },
+            { id: 'monster', name: '몬스터 에너지', caffeine: 100, icon: '爪', color: 'border-green-200 hover:border-green-400' },
+            { id: 'snoopy', name: '스누피 커피우유', caffeine: 237, icon: '🥛', color: 'border-amber-200 hover:border-amber-400' }
+        ];
+
+        const sensitivities = [
+            { id: 'low', name: '영향이 적은 사람', desc: '카페인 분해가 매우 빠릅니다.', multiplier: 0.05 },
+            { id: 'normal', name: '일반인', desc: '표준적인 카페인 반응을 보입니다.', multiplier: 0.15 },
+            { id: 'high', name: '영향이 큰 사람', desc: '미량에도 심박수가 크게 뜁니다.', multiplier: 0.35 }
+        ];
+
+        // --- 상태 변수 ---
+        let state = {
+            drinkId: 'water',
+            sensitivityId: 'normal',
+            baseBPM: 72,
+            targetBPM: 72,
+            currentDisplayBPM: 72 // 애니메이션용
+        };
+
+        // UI 요소
+        const drinkContainer = document.getElementById('drink-container');
+        const sensitivityContainer = document.getElementById('sensitivity-container');
+        const bpmDisplay = document.getElementById('bpm-display');
+        const addedBpmDisplay = document.getElementById('added-bpm');
+        const statusBadge = document.getElementById('status-badge');
+        const statusText = document.getElementById('status-text');
+
+        // --- UI 생성 함수 ---
+        function renderUI() {
+            // 음료 카드 생성
+            drinks.forEach(drink => {
+                const btn = document.createElement('button');
+                btn.className = `flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all text-left bg-white ${drink.color} ${state.drinkId === drink.id ? 'card-selected' : 'border-slate-100 hover:bg-slate-50'}`;
+                btn.onclick = () => selectDrink(drink.id);
+                btn.innerHTML = `
+                    <span class="text-3xl mb-2">${drink.icon}</span>
+                    <span class="font-bold text-sm text-slate-800">${drink.name}</span>
+                    <span class="text-xs text-slate-500 font-mono mt-1">${drink.caffeine}mg</span>
+                `;
+                drinkContainer.appendChild(btn);
+            });
+
+            // 민감도 카드 생성
+            sensitivities.forEach(sens => {
+                const btn = document.createElement('button');
+                btn.className = `flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left bg-white ${state.sensitivityId === sens.id ? 'card-selected' : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`;
+                btn.onclick = () => selectSensitivity(sens.id);
+                btn.innerHTML = `
+                    <div class="flex items-center gap-2 mb-1">
+                        <div class="w-4 h-4 rounded-full border border-slate-300 flex items-center justify-center ${state.sensitivityId === sens.id ? 'border-blue-500 bg-blue-500' : ''}">
+                            ${state.sensitivityId === sens.id ? '<div class="w-1.5 h-1.5 bg-white rounded-full"></div>' : ''}
+                        </div>
+                        <span class="font-bold text-sm text-slate-800">${sens.name}</span>
+                    </div>
+                    <span class="text-xs text-slate-500 ml-6">${sens.desc}</span>
+                `;
+                sensitivityContainer.appendChild(btn);
+            });
+        }
+
+        // --- 상호작용 함수 ---
+        function selectDrink(id) {
+            state.drinkId = id;
+            updateSelectionUI();
+            calculateBPM();
+        }
+
+        function selectSensitivity(id) {
+            state.sensitivityId = id;
+            updateSelectionUI();
+            calculateBPM();
+        }
+
+        function updateSelectionUI() {
+            // 버튼 스타일 업데이트
+            Array.from(drinkContainer.children).forEach((btn, index) => {
+                const isSelected = drinks[index].id === state.drinkId;
+                btn.className = `flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all text-left bg-white ${drinks[index].color} ${isSelected ? 'card-selected' : 'border-slate-100 hover:bg-slate-50'}`;
+            });
+
+            Array.from(sensitivityContainer.children).forEach((btn, index) => {
+                const isSelected = sensitivities[index].id === state.sensitivityId;
+                btn.className = `flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left bg-white ${isSelected ? 'card-selected' : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50'}`;
+                
+                const radioCircle = btn.querySelector('.w-4');
+                if(isSelected) {
+                    radioCircle.className = "w-4 h-4 rounded-full border border-blue-500 bg-blue-500 flex items-center justify-center";
+                    radioCircle.innerHTML = '<div class="w-1.5 h-1.5 bg-white rounded-full"></div>';
+                } else {
+                    radioCircle.className = "w-4 h-4 rounded-full border border-slate-300 flex items-center justify-center";
+                    radioCircle.innerHTML = '';
+                }
+            });
+        }
+
+        function calculateBPM() {
+            const drink = drinks.find(d => d.id === state.drinkId);
+            const sens = sensitivities.find(s => s.id === state.sensitivityId);
+            
+            const addedBpm = Math.round(drink.caffeine * sens.multiplier);
+            state.targetBPM = state.baseBPM + addedBpm;
+            
+            addedBpmDisplay.innerText = `+${addedBpm} BPM`;
+        }
+
+        function updateStatusUI(bpm) {
+            bpmDisplay.innerText = Math.round(bpm);
+            
+            // 색상 및 상태 텍스트 변경
+            if (bpm < 85) {
+                statusBadge.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold bg-green-100 text-green-700 w-fit transition-all duration-300";
+                statusBadge.querySelector('span').className = "w-2 h-2 rounded-full bg-green-500";
+                statusText.innerText = "정상 (안정 상태)";
+                bpmDisplay.classList.remove('text-orange-500', 'text-rose-600');
+                bpmDisplay.classList.add('text-slate-800');
+            } else if (bpm < 110) {
+                statusBadge.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold bg-orange-100 text-orange-700 w-fit transition-all duration-300";
+                statusBadge.querySelector('span').className = "w-2 h-2 rounded-full bg-orange-500";
+                statusText.innerText = "주의 (심박수 상승)";
+                bpmDisplay.classList.remove('text-slate-800', 'text-rose-600');
+                bpmDisplay.classList.add('text-orange-500');
+            } else {
+                statusBadge.className = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold bg-rose-100 text-rose-700 w-fit transition-all duration-300";
+                statusBadge.querySelector('span').className = "w-2 h-2 rounded-full bg-rose-500 animate-pulse";
+                statusText.innerText = "위험 (빈맥, 두근거림)";
+                bpmDisplay.classList.remove('text-slate-800', 'text-orange-500');
+                bpmDisplay.classList.add('text-rose-600');
+            }
+        }
+
+        // --- 캔버스 애니메이션 시스템 ---
+        
+        const heartCanvas = document.getElementById('heartCanvas');
+        const hCtx = heartCanvas.getContext('2d');
+        const ecgCanvas = document.getElementById('ecgCanvas');
+        const eCtx = ecgCanvas.getContext('2d');
+
+        // DPI 대응 캔버스 리사이징
+        function resizeCanvas() {
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Heart Canvas
+            const hRect = heartCanvas.parentElement.getBoundingClientRect();
+            // 강제로 정사각형 유지
+            const hSize = Math.min(hRect.width, hRect.height);
+            heartCanvas.width = hSize * dpr;
+            heartCanvas.height = hSize * dpr;
+            hCtx.scale(dpr, dpr);
+            heartCanvas.style.width = `${hSize}px`;
+            heartCanvas.style.height = `${hSize}px`;
+
+            // ECG Canvas
+            const eRect = ecgCanvas.parentElement.getBoundingClientRect();
+            ecgCanvas.width = eRect.width * dpr;
+            ecgCanvas.height = eRect.height * dpr;
+            eCtx.scale(dpr, dpr);
+            
+            ecgHistory = new Array(Math.ceil(eRect.width)).fill(0);
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+
+        // 애니메이션 공유 상태
+        let lastTime = performance.now();
+        let beatPhase = 0; // 0.0 ~ 1.0 (한 번의 심박 주기)
+        let heartScale = 1.0;
+        
+        // ECG 데이터 버퍼
+        let ecgHistory = [];
+        let ecgXOffset = 0;
+
+        function drawHeart(ctx, width, height, scale) {
+            ctx.save();
+            ctx.clearRect(0, 0, width, height);
+            
+            ctx.translate(width / 2, height / 2 + 10); // 중심점 이동 (약간 아래로)
+            ctx.scale(scale, scale);
+
+            // 심장 그리기 경로 (베지어 곡선)
+            const size = Math.min(width, height) * 0.035; // 기준 크기
+            ctx.beginPath();
+            ctx.moveTo(0, -size);
+            ctx.bezierCurveTo(size * 1.5, -size * 3.5, size * 4, -size * 1.5, 0, size * 3);
+            ctx.bezierCurveTo(-size * 4, -size * 1.5, -size * 1.5, -size * 3.5, 0, -size);
+            ctx.closePath();
+
+            // 색상 결정 (BPM이 높을수록 더 붉고 강렬하게)
+            let hue = 350; // 기본 빨간색 (약간의 장미빛)
+            let saturation = 80;
+            let lightness = 55;
+            
+            if (state.currentDisplayBPM > 100) {
+                hue = 0;
+                saturation = 90;
+                lightness = 50;
+            }
+
+            // 그라데이션 적용
+            const gradient = ctx.createRadialGradient(0, -size, size, 0, 0, size*4);
+            gradient.addColorStop(0, `hsl(${hue}, ${saturation}%, ${lightness + 15}%)`);
+            gradient.addColorStop(1, `hsl(${hue}, ${saturation}%, ${lightness - 10}%)`);
+
+            ctx.fillStyle = gradient;
+            
+            // 그림자 효과 (수축 시 그림자 감소, 이완 시 증가로 입체감)
+            ctx.shadowColor = `rgba(225, 29, 72, ${0.4 * scale})`;
+            ctx.shadowBlur = 20 * scale;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 10 * scale;
+
+            ctx.fill();
+
+            // 외곽선
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = `hsl(${hue}, ${saturation}%, ${lightness - 20}%)`;
+            ctx.stroke();
+
+            // 광택 (Highlight)
+            ctx.beginPath();
+            ctx.moveTo(0, -size*0.5);
+            ctx.bezierCurveTo(size * 0.8, -size * 2, size * 2, -size * 1, size*0.5, size*0.5);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+
+            ctx.restore();
+        }
+
+        // phase(0.0~1.0)에 따른 ECG Y값 반환 함수
+        function getECGValue(phase) {
+            let val = 0;
+            
+            // 파형의 수학적 모델링 (의사 코드로 형태만 흉내)
+            // P파 (심방 수축)
+            if (phase > 0.05 && phase < 0.15) {
+                val = Math.sin((phase - 0.05) * Math.PI * 10) * 0.15;
+            }
+            // QRS 복합파 (심실 수축, 가장 높은 피크)
+            else if (phase >= 0.20 && phase < 0.22) { // Q 하강
+                val = -(phase - 0.20) * 20; 
+            }
+            else if (phase >= 0.22 && phase < 0.24) { // R 상승 (피크)
+                val = -0.4 + (phase - 0.22) * 80;
+            }
+            else if (phase >= 0.24 && phase < 0.26) { // R 하강 -> S 하강
+                val = 1.2 - (phase - 0.24) * 90;
+            }
+            else if (phase >= 0.26 && phase < 0.28) { // S 상승 (기저선으로 복귀)
+                val = -0.6 + (phase - 0.26) * 30;
+            }
+            // T파 (심실 이완/재분극)
+            else if (phase > 0.45 && phase < 0.60) {
+                val = Math.sin((phase - 0.45) * Math.PI / 0.15) * 0.3;
+            }
+            // U파 (생략)
+            
+            // 약간의 노이즈 추가
+            val += (Math.random() - 0.5) * 0.02;
+
+            return val;
+        }
+
+        function animate(time) {
+            const deltaTime = (time - lastTime) / 1000; // 초 단위
+            lastTime = time;
+
+            // 1. BPM 부드러운 전환 (Easing)
+            state.currentDisplayBPM += (state.targetBPM - state.currentDisplayBPM) * 5 * deltaTime;
+            updateStatusUI(state.currentDisplayBPM);
+
+            // 2. Phase 업데이트
+            // BPM에 따라 1초에 몇 번의 박동이 있는지 계산 (BPM / 60)
+            const beatsPerSecond = state.currentDisplayBPM / 60;
+            const previousPhase = beatPhase;
+            beatPhase += beatsPerSecond * deltaTime;
+
+            // QRS 피크 부근에서 심장 수축 애니메이션 트리거
+            if (previousPhase < 0.22 && beatPhase >= 0.22) {
+                heartScale = 1.2; // 펌핑! (커짐)
+            } else if (previousPhase < 0.45 && beatPhase >= 0.45) {
+                heartScale = 1.05; // T파 부근 작은 펌핑 (이완 전)
+            }
+
+            if (beatPhase >= 1.0) {
+                beatPhase -= 1.0;
+            }
+
+            // 심장 스케일 자연스러운 감소 (스프링 효과처럼)
+            heartScale += (1.0 - heartScale) * 10 * deltaTime;
+
+            // 3. 심장 그리기
+            const hRect = heartCanvas.parentElement.getBoundingClientRect();
+            // 부모 컨테이너 크기가 0이면 그리지 않음 (초기 로드 시 등)
+            if (hRect.width > 0 && hRect.height > 0) {
+                 drawHeart(hCtx, heartCanvas.width / (window.devicePixelRatio || 1), heartCanvas.height / (window.devicePixelRatio || 1), heartScale);
+            }
+
+            // 4. ECG 그리기
+            const eRect = ecgCanvas.parentElement.getBoundingClientRect();
+            const cssWidth = eRect.width;
+            const cssHeight = eRect.height;
+            
+            if (cssWidth > 0 && cssHeight > 0) {
+                eCtx.clearRect(0, 0, cssWidth, cssHeight);
+                
+                // 새 데이터 생성 및 버퍼 이동
+                // 화면의 가로 픽셀 수만큼 배열을 유지. (스위프 효과를 위해)
+                // BPM이 높으면 파형이 좁아져야 하므로 phase를 그대로 사용
+                const newValue = getECGValue(beatPhase);
+                
+                // 배열 맨 뒤에 추가하고 맨 앞 제거 (스크롤 효과)
+                ecgHistory.push(newValue);
+                if (ecgHistory.length > cssWidth) {
+                    ecgHistory.shift();
+                }
+
+                // 선 그리기
+                eCtx.beginPath();
+                const midY = cssHeight / 2 + 10; // 약간 아래로
+                const amplitude = cssHeight * 0.35; // 진폭 조절 (픽셀 단위)
+
+                eCtx.strokeStyle = '#4ade80'; // Tailwind green-400
+                eCtx.lineWidth = 2;
+                eCtx.lineJoin = 'round';
+                eCtx.lineCap = 'round';
+
+                for (let i = 0; i < ecgHistory.length; i++) {
+                    const x = i;
+                    // Y값은 음수가 위로 가야 하므로 빼줌
+                    const y = midY - (ecgHistory[i] * amplitude);
+                    
+                    if (i === 0) {
+                        eCtx.moveTo(x, y);
+                    } else {
+                        eCtx.lineTo(x, y);
+                    }
+                }
+                eCtx.stroke();
+                
+                // 선두 점 (현재 스캔 위치 느낌)
+                if (ecgHistory.length > 0) {
+                    const lastX = ecgHistory.length - 1;
+                    const lastY = midY - (ecgHistory[ecgHistory.length - 1] * amplitude);
+                    
+                    eCtx.beginPath();
+                    eCtx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+                    eCtx.fillStyle = '#ffffff';
+                    eCtx.fill();
+                    
+                    // 글로우 효과
+                    eCtx.shadowColor = '#4ade80';
+                    eCtx.shadowBlur = 10;
+                    eCtx.fill();
+                    eCtx.shadowBlur = 0; // 초기화
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        // --- 초기화 ---
+        window.onload = function() {
+            renderUI();
+            resizeCanvas();
+            updateSelectionUI();
+            calculateBPM();
+            requestAnimationFrame(animate);
+        };
+
+    </script>
+</body>
+</html>
